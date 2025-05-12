@@ -7,16 +7,15 @@ start() ->
         "init" ->
             db_manager:start(init),
             io:format("Base créée sur ~p~n", [node()]),
-            scheduler:menu();  % lance le menu après création
-
+            scheduler:start();
         "join" ->
             db_manager:start(join),
-            Remote = string:trim(io:get_line("Nom du nœud principal (ex: server@nom-pc) : ")),
+            Remote = string:trim(io:get_line("Nom du nœud principal (ex: server@machine) : ")),
             RemoteNode = list_to_atom(Remote),
-            db_manager:connect_to(RemoteNode),
-            io:format("Connecté à la base sur ~p~n", [RemoteNode]),
-            scheduler:menu();
-
+            case db_manager:connect_to(RemoteNode) of
+                ok -> scheduler:start();
+                error -> io:format("Connexion échouée. Relancez avec le bon nom de nœud.~n")
+            end;
         _ ->
             io:format("Mode inconnu. Tapez init ou join.~n"),
             start()

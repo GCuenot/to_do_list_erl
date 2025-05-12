@@ -3,8 +3,10 @@
 -include("event.hrl").
 -include("user.hrl").
 
--export([start/1, stop/0, add_event/1, update_event/2, delete_event/1, get_all_events/0,
-         register_user/2, login_user/2, connect_to/1]).
+-export([
+    start/1, stop/0, add_event/1, update_event/2, delete_event/1, get_all_events/0,
+    register_user/2, login_user/2, connect_to/1
+]).
 
 start(Mode) ->
     case Mode of
@@ -18,8 +20,8 @@ start(Mode) ->
             mnesia:create_table(event, [
                 {attributes, record_info(fields, event)},
                 {disc_copies, [node()]}
-            ]);
-        
+            ]),
+            ok;
         join ->
             mnesia:start(),
             ok
@@ -29,27 +31,48 @@ stop() ->
     mnesia:stop().
 
 connect_to(RemoteNode) ->
-    net_adm:ping(RemoteNode),
-    mnesia:change_config(extra_db_nodes, [RemoteNode]),
-    [mnesia:add_table_copy(Tab, node(), disc_copies) || Tab <- [event, user]],
-    ok.
+    case net_adm:ping(RemoteNode) of
+        pong ->
+            io:format("Connexion réussie à ~p~n", [RemoteNode]),
+            mnesia:change_config(extra_db_nodes, [RemoteNode]),
+            [ensure_copy(Tab, RemoteNode) || Tab <- [user, event]],
+            ok;
+        pang ->
+            io:format("Échec de connexion à ~p~n", [RemoteNode]),
+            error
+    end.
+
+ensure_copy(Tab, RemoteNode) ->
+    case mnesia:table_info(Tab, where_to_read) of
+        undefined ->
+            mnesia:add_table_copy(Tab, node(), disc_copies);
+        Nodes when is_list(Nodes) ->
+            case lists:member(node(), Nodes) of
+                true -> ok;
+                false -> mnesia:add_table_copy(Tab, node(), disc_copies)
+            end
+    end.
 
 %% Utilisateurs
 register_user(Username, Password) ->
     User = #user{username = Username, password = Password},
-    mnesia:transaction(fun() -> mnesia:write(User) end).
+    Fun = fun() ->
+        case mnesia:read({user, Username}) of
+            [] -> mnesia:write(User), {ok, "Inscription réussie."};
+            _ -> {error, "Nom d'utilisateur déjà utilisé."}
+        end
+    end,
+    mnesia:transaction(Fun).
 
 login_user(Username, Password) ->
     Fun = fun() ->
         case mnesia:read({user, Username}) of
-            [#user{password = Password}] -> ok;
-            _ -> error
+            [#user{password = Password}] -> {ok, Username};
+            [#user{}] -> {error, "Mot de passe incorrect."};
+            [] -> {error, "Utilisateur introuvable."}
         end
     end,
-    case mnesia:transaction(Fun) of
-        {atomic, ok} -> ok;
-        _ -> error
-    end.
+    mnesia:transaction(Fun).
 
 %% Événements
 add_event({Id, Jour, Heure, Titre, Utilisateur}) ->

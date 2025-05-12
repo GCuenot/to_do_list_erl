@@ -4,7 +4,7 @@
 -include("event.hrl").
 
 start() ->
-    db_manager:start(),
+    %%db_manager:start().
     auth_loop().
 
 auth_loop() ->
@@ -24,11 +24,14 @@ login() ->
     Username = string:trim(io:get_line("Nom d'utilisateur : ")),
     Password = string:trim(io:get_line("Mot de passe : ")),
     case db_manager:login_user(Username, Password) of
-        {ok, Username} ->
+        {atomic, {ok, Username}} ->
             io:format("Connexion réussie.~n"),
             menu(Username);
-        {error, Msg} ->
+        {atomic, {error, Msg}} ->
             io:format("Erreur : ~s~n", [Msg]),
+            auth_loop();
+        {aborted, Reason} -> % Cas d'une erreur dans la transaction
+            io:format("Échec de la connexion : ~s~n", [Reason]),
             auth_loop()
     end.
 
@@ -36,13 +39,17 @@ register() ->
     Username = string:trim(io:get_line("Choisissez un nom d'utilisateur : ")),
     Password = string:trim(io:get_line("Choisissez un mot de passe : ")),
     case db_manager:register_user(Username, Password) of
-        {ok, Msg} ->
+        {atomic, {ok, Msg}} ->
             io:format("~s~n", [Msg]),
             auth_loop();
-        {error, Msg} ->
+        {atomic, {error, Msg}} ->
             io:format("Erreur : ~s~n", [Msg]),
+            auth_loop();
+        {aborted, Reason} -> % Cas d'une erreur dans la transaction
+            io:format("Échec de l'inscription : ~s~n", [Reason]),
             auth_loop()
     end.
+
 
 menu(Utilisateur) ->
     io:format("~n--- MENU TO-DO LIST ---~n"),
