@@ -1,4 +1,3 @@
-
 -module(todo_client).
 -export([start/2]).
 
