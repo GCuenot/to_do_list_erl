@@ -55,12 +55,38 @@ check_user(Name, Password) ->
 add_task(Name, Day, Month, Year, Task) ->
     case is_valid_date(Day, Month, Year) of
         true ->
-            DateStr = format_date(Day, Month, Year),
-            mnesia:transaction(fun() ->
-                mnesia:write(#todo{name = Name, day = DateStr, task = Task, status = not_done})
-            end);
-        false -> {error, invalid_date}
+
+        io:format("DEBUG: Ajout tâche: ~p ~p ~p ~p ~p~n", [Name, Day, Month, Year, Task]),
+
+            case is_past_date(Day, Month, Year) of
+                true ->
+                    {error, past_date};
+                false ->
+                    DateStr = format_date(Day, Month, Year),
+                    mnesia:transaction(fun() ->
+                        mnesia:write(#todo{name = Name, day = DateStr, task = Task, status = not_done})
+                    end)
+            end;
+        false ->
+            {error, invalid_date}
     end.
+
+is_past_date(Day, Month, Year) ->
+    io:format("DEBUG: Vérif date: ~p/~p/~p~n", [Day, Month, Year]),
+    {{CurrentYear, CurrentMonth, CurrentDay}, _} = calendar:local_time(),
+    io:format("Current date: ~p~n", [{{CurrentYear, CurrentMonth, CurrentDay}}]),
+
+    case {Year, Month, Day} < {CurrentYear, CurrentMonth, CurrentDay} of
+        true -> true;
+        false -> false
+    end.
+
+
+
+
+
+
+
 
 set_done(Name, DayStr, Task) ->
     mnesia:transaction(fun() ->

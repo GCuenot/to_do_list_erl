@@ -82,8 +82,11 @@ user_loop(Sock, Name) ->
                         {atomic, ok} ->
                             gen_tcp:send(Sock, "Tâche ajoutée.\n");
                         {error, invalid_date} ->
-                            gen_tcp:send(Sock, "Date invalide.\n")
+                            gen_tcp:send(Sock, "Date invalide.\n");
+                        {error, past_date} ->
+                            gen_tcp:send(Sock, "Vous ne pouvez pas ajouter une tâche dans le passé.\n")
                     end,
+
                     user_loop(Sock, Name);
 
                 ["done", DateStr | Toks] ->
@@ -129,3 +132,4 @@ user_loop(Sock, Name) ->
         {error, closed} ->
             io:format("Déconnexion de ~s~n", [Name])
     end.
+
