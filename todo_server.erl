@@ -17,16 +17,33 @@ handle_client(Sock) ->
     case gen_tcp:recv(Sock, 0) of
         {ok, ChoiceBin} ->
             Choice = string:trim(binary_to_list(ChoiceBin)),
-            gen_tcp:send(Sock, "Nom d'utilisateur: "),
-            {ok, NameBin} = gen_tcp:recv(Sock, 0),
-            Name = string:trim(binary_to_list(NameBin)),
-            gen_tcp:send(Sock, "Mot de passe: "),
-            {ok, PassBin} = gen_tcp:recv(Sock, 0),
-            Pass = string:trim(binary_to_list(PassBin)),
-            handle_login_choice(Choice, Name, Pass, Sock);
+            case Choice of
+                "1" ->
+                    gen_tcp:send(Sock, "Nom d'utilisateur: "),
+                    {ok, NameBin} = gen_tcp:recv(Sock, 0),
+                    Name = string:trim(binary_to_list(NameBin)),
+                    gen_tcp:send(Sock, "Mot de passe: "),
+                    {ok, PassBin} = gen_tcp:recv(Sock, 0),
+                    Pass = string:trim(binary_to_list(PassBin)),
+                    handle_login_choice("1", Name, Pass, Sock);
+
+                "2" ->
+                    gen_tcp:send(Sock, "Nom d'utilisateur: "),
+                    {ok, NameBin} = gen_tcp:recv(Sock, 0),
+                    Name = string:trim(binary_to_list(NameBin)),
+                    gen_tcp:send(Sock, "Mot de passe: "),
+                    {ok, PassBin} = gen_tcp:recv(Sock, 0),
+                    Pass = string:trim(binary_to_list(PassBin)),
+                    handle_login_choice("2", Name, Pass, Sock);
+
+                _ ->
+                    gen_tcp:send(Sock, "Choix invalide.\n"),
+                    handle_client(Sock)
+            end;
         {error, closed} ->
             io:format("Connexion fermée brusquement~n")
     end.
+
 
 handle_login_choice("1", Name, Pass, Sock) ->
     case todo_db:check_user(Name, Pass) of
@@ -34,14 +51,15 @@ handle_login_choice("1", Name, Pass, Sock) ->
             gen_tcp:send(Sock, "Connecté avec succès.\n"),
             user_loop(Sock, Name);
         {atomic, {error, wrong_password}} ->
-            gen_tcp:send(Sock, "Mot de passe incorrect. Déconnexion.\n"),
-            gen_tcp:close(Sock);
+            gen_tcp:send(Sock, "Mot de passe incorrect. Retour au menu.\n"),
+            handle_client(Sock);
         {atomic, {error, not_found}} ->
-            gen_tcp:send(Sock, "Utilisateur introuvable. Déconnexion.\n"),
-            gen_tcp:close(Sock);
+            gen_tcp:send(Sock, "Utilisateur introuvable. Retour au menu.\n"),
+            handle_client(Sock);
         Other ->
             io:format("Erreur: ~p~n", [Other]),
-            gen_tcp:close(Sock)
+            gen_tcp:send(Sock, "Une erreur est survenue. Retour au menu.\n"),
+            handle_client(Sock)
     end;
 handle_login_choice("2", Name, Pass, Sock) ->
     case todo_db:create_user(Name, Pass) of
@@ -50,14 +68,14 @@ handle_login_choice("2", Name, Pass, Sock) ->
             user_loop(Sock, Name);
         {atomic, {error, exists}} ->
             gen_tcp:send(Sock, "Utilisateur déjà existant. Déconnexion.\n"),
-            gen_tcp:close(Sock);
+            handle_client(Sock);
         Other ->
             io:format("Erreur: ~p~n", [Other]),
-            gen_tcp:close(Sock)
+            handle_client(Sock)
     end;
 handle_login_choice(_, _, _, Sock) ->
-    gen_tcp:send(Sock, "Choix invalide. Déconnexion.\n"),
-    gen_tcp:close(Sock).
+    gen_tcp:send(Sock, "Choix invalide.\n"),
+    handle_client(Sock).
 
 user_loop(Sock, Name) ->
     gen_tcp:send(Sock, "Commandes: add | done <date jj/mm/aaaa> <tâche> | show <date jj/mm/aaaa> | showall | quit\n> "),
