@@ -6,7 +6,7 @@
 ]).
 
 -record(user, {name, password}).
--record(todo, {name, day, task, status}). % status = done | not_done
+-record(todo, {id, name, day, task, status}). % id ajouté pour éviter les écrasements
 
 start() ->
     Node = node(),
@@ -21,7 +21,7 @@ start() ->
     end,
     mnesia:wait_for_tables([schema], 5000),
     ensure_table(user, [name, password]),
-    ensure_table(todo, [name, day, task, status]),
+    ensure_table(todo, [id, name, day, task, status]),
     mnesia:wait_for_tables([user, todo], 5000).
 
 ensure_table(Table, Attributes) ->
@@ -55,16 +55,15 @@ check_user(Name, Password) ->
 add_task(Name, Day, Month, Year, Task) ->
     case is_valid_date(Day, Month, Year) of
         true ->
-
-        io:format("DEBUG: Ajout tâche: ~p ~p ~p ~p ~p~n", [Name, Day, Month, Year, Task]),
-
+            io:format("DEBUG: Ajout tâche: ~p ~p ~p ~p ~p~n", [Name, Day, Month, Year, Task]),
             case is_past_date(Day, Month, Year) of
                 true ->
                     {error, past_date};
                 false ->
                     DateStr = format_date(Day, Month, Year),
+                    ID = erlang:unique_integer([monotonic, positive]),
                     mnesia:transaction(fun() ->
-                        mnesia:write(#todo{name = Name, day = DateStr, task = Task, status = not_done})
+                        mnesia:write(#todo{id = ID, name = Name, day = DateStr, task = Task, status = not_done})
                     end)
             end;
         false ->
@@ -75,22 +74,14 @@ is_past_date(Day, Month, Year) ->
     io:format("DEBUG: Vérif date: ~p/~p/~p~n", [Day, Month, Year]),
     {{CurrentYear, CurrentMonth, CurrentDay}, _} = calendar:local_time(),
     io:format("Current date: ~p~n", [{{CurrentYear, CurrentMonth, CurrentDay}}]),
-
     case {Year, Month, Day} < {CurrentYear, CurrentMonth, CurrentDay} of
         true -> true;
         false -> false
     end.
 
-
-
-
-
-
-
-
 set_done(Name, DayStr, Task) ->
     mnesia:transaction(fun() ->
-        case mnesia:match_object(#todo{name = Name, day = DayStr, task = Task, status = '_'}) of
+        case mnesia:match_object(#todo{id = '_', name = Name, day = DayStr, task = Task, status = '_'}) of
             [T] ->
                 mnesia:write(T#todo{status = done}),
                 ok;
@@ -100,15 +91,14 @@ set_done(Name, DayStr, Task) ->
 
 get_day_tasks(Name, DayStr) ->
     mnesia:transaction(fun() ->
-        mnesia:match_object(#todo{name = Name, day = DayStr, task = '_', status = '_'})
+        mnesia:match_object(#todo{id = '_', name = Name, day = DayStr, task = '_', status = '_'})
     end).
 
 get_all_tasks(Name) ->
     mnesia:transaction(fun() ->
-        mnesia:match_object(#todo{name = Name, day = '_', task = '_', status = '_'})
+        mnesia:match_object(#todo{id = '_', name = Name, day = '_', task = '_', status = '_'})
     end).
 
-% Vérifie que la date est bien formée
 is_valid_date(Day, Month, Year) when
     Day >= 1, Day =< 31,
     Month >= 1, Month =< 12,
@@ -117,6 +107,5 @@ is_valid_date(Day, Month, Year) when
 is_valid_date(_, _, _) ->
     false.
 
-% Formate une date entière en "jour/mois/année"
 format_date(Day, Month, Year) ->
     lists:flatten(io_lib:format("~2..0B/~2..0B/~4..0B", [Day, Month, Year])).
