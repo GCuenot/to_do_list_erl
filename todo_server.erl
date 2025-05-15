@@ -75,12 +75,27 @@ handle_login_choice("2", Name, Pass, Sock) ->
     end.
 
 user_loop(Sock, Name) ->
-    gen_tcp:send(Sock, "Commandes: add | done <date jj/mm/aaaa> <tâche> | show <date jj/mm/aaaa> | showall | quit\n> "),
+    gen_tcp:send(Sock, 
+"========================================\r\n"
+"         GESTIONNAIRE DE TACHES         \r\n"
+"========================================\r\n"
+"\r\n"
+" Que souhaitez-vous faire ?\r\n"
+"\r\n"
+" 1. Ajouter une tâche\r\n"
+" 2. Marquer une tâche comme terminée\r\n"
+" 3. Afficher les tâches d'une date\r\n"
+" 4. Afficher toutes les tâches\r\n"
+" 5. Se déconnecter\r\n"
+" 6. Quitter le programme\r\n"
+"\r\n"
+" Entrez un numéro (1-6) :\r\n> "
+),
     case gen_tcp:recv(Sock, 0) of
         {ok, Bin} ->
             Line = string:trim(binary_to_list(Bin)),
             case string:tokens(Line, " ") of
-                ["add"] ->
+                ["1"] -> %add
                     gen_tcp:send(Sock, "Jour (1-31): "),
                     {ok, DayBin} = gen_tcp:recv(Sock, 0),
                     Day = list_to_integer(string:trim(binary_to_list(DayBin))),
@@ -103,7 +118,7 @@ user_loop(Sock, Name) ->
                     end,
                     user_loop(Sock, Name);
 
-                ["done", DateStr | Toks] ->
+                ["2", DateStr | Toks] ->%done
                     Task = string:join(Toks, " "),
                     case todo_db:set_done(DateStr, Task) of
                         {atomic, ok} ->
@@ -113,7 +128,7 @@ user_loop(Sock, Name) ->
                     end,
                     user_loop(Sock, Name);
 
-                ["show", DateStr] ->
+                ["3", DateStr] -> %show
                     case todo_db:get_day_tasks(DateStr) of
                         {atomic, Tasks} ->
                             lists:foreach(fun(#todo{name=N, day=D, task=T, status=S}) ->
@@ -124,7 +139,7 @@ user_loop(Sock, Name) ->
                     end,
                     user_loop(Sock, Name);
 
-                ["showall"] ->
+                ["4"] -> %showall
                     case todo_db:get_all_tasks() of
                         {atomic, Tasks} ->
                             lists:foreach(fun(#todo{name=N, day=D, task=T, status=S}) ->
@@ -135,9 +150,13 @@ user_loop(Sock, Name) ->
                     end,
                     user_loop(Sock, Name);
 
-                ["quit"] ->
+                ["6"] -> %quit
                     gen_tcp:send(Sock, "Au revoir !\n"),
                     gen_tcp:close(Sock);
+
+                ["5"] -> %logout
+                    gen_tcp:send(Sock, "Retour a la page de connexion!\n"),
+                    handle_client(Sock);
 
                 _ ->
                     gen_tcp:send(Sock, "Commande invalide.\n"),
