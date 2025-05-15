@@ -1,6 +1,8 @@
 -module(todo_server).
 -export([start/1, accept/1, handle_client/1]).
 
+-include("todo_db.hrl").
+
 start(Port) ->
     todo_db:start(),
     {ok, LSock} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]),
@@ -44,7 +46,6 @@ handle_client(Sock) ->
             io:format("Connexion fermée brusquement~n")
     end.
 
-
 handle_login_choice("1", Name, Pass, Sock) ->
     case todo_db:check_user(Name, Pass) of
         {atomic, ok} ->
@@ -56,9 +57,8 @@ handle_login_choice("1", Name, Pass, Sock) ->
         {atomic, {error, not_found}} ->
             gen_tcp:send(Sock, "Utilisateur introuvable. Retour au menu.\n"),
             handle_client(Sock);
-        Other ->
-            io:format("Erreur: ~p~n", [Other]),
-            gen_tcp:send(Sock, "Une erreur est survenue. Retour au menu.\n"),
+        _ ->
+            gen_tcp:send(Sock, "Erreur système. Retour au menu.\n"),
             handle_client(Sock)
     end;
 handle_login_choice("2", Name, Pass, Sock) ->
@@ -67,15 +67,12 @@ handle_login_choice("2", Name, Pass, Sock) ->
             gen_tcp:send(Sock, "Utilisateur créé avec succès.\n"),
             user_loop(Sock, Name);
         {atomic, {error, exists}} ->
-            gen_tcp:send(Sock, "Utilisateur déjà existant. Déconnexion.\n"),
+            gen_tcp:send(Sock, "Utilisateur déjà existant.\n"),
             handle_client(Sock);
-        Other ->
-            io:format("Erreur: ~p~n", [Other]),
+        _ ->
+            gen_tcp:send(Sock, "Erreur système. Retour au menu.\n"),
             handle_client(Sock)
-    end;
-handle_login_choice(_, _, _, Sock) ->
-    gen_tcp:send(Sock, "Choix invalide.\n"),
-    handle_client(Sock).
+    end.
 
 user_loop(Sock, Name) ->
     gen_tcp:send(Sock, "Commandes: add | done <date jj/mm/aaaa> <tâche> | show <date jj/mm/aaaa> | showall | quit\n> "),
@@ -104,12 +101,11 @@ user_loop(Sock, Name) ->
                         {error, past_date} ->
                             gen_tcp:send(Sock, "Vous ne pouvez pas ajouter une tâche dans le passé.\n")
                     end,
-
                     user_loop(Sock, Name);
 
                 ["done", DateStr | Toks] ->
                     Task = string:join(Toks, " "),
-                    case todo_db:set_done(Name, DateStr, Task) of
+                    case todo_db:set_done(DateStr, Task) of
                         {atomic, ok} ->
                             gen_tcp:send(Sock, "Tâche marquée comme faite.\n");
                         {atomic, {error, not_found}} ->
@@ -118,10 +114,10 @@ user_loop(Sock, Name) ->
                     user_loop(Sock, Name);
 
                 ["show", DateStr] ->
-                    case todo_db:get_day_tasks(Name, DateStr) of
+                    case todo_db:get_day_tasks(DateStr) of
                         {atomic, Tasks} ->
-                            lists:foreach(fun(T) ->
-                                gen_tcp:send(Sock, io_lib:format("~p\n", [T]))
+                            lists:foreach(fun(#todo{name=N, day=D, task=T, status=S}) ->
+                                gen_tcp:send(Sock, io_lib:format("~s - ~s : ~s [~p]\n", [D, N, T, S]))
                             end, Tasks);
                         _ ->
                             gen_tcp:send(Sock, "Erreur lors de la récupération.\n")
@@ -129,10 +125,10 @@ user_loop(Sock, Name) ->
                     user_loop(Sock, Name);
 
                 ["showall"] ->
-                    case todo_db:get_all_tasks(Name) of
+                    case todo_db:get_all_tasks() of
                         {atomic, Tasks} ->
-                            lists:foreach(fun(T) ->
-                                gen_tcp:send(Sock, io_lib:format("~p\n", [T]))
+                            lists:foreach(fun(#todo{name=N, day=D, task=T, status=S}) ->
+                                gen_tcp:send(Sock, io_lib:format("~s - ~s : ~s [~p]\n", [D, N, T, S]))
                             end, Tasks);
                         _ ->
                             gen_tcp:send(Sock, "Erreur lors de la récupération.\n")
@@ -150,4 +146,3 @@ user_loop(Sock, Name) ->
         {error, closed} ->
             io:format("Déconnexion de ~s~n", [Name])
     end.
-

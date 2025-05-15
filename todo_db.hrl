@@ -1,0 +1,2 @@
+-record(user, {name, password}).
+-record(todo, {id, name, day, task, status}). % id unique, name = auteur
